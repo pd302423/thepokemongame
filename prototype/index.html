@@ -1,0 +1,1552 @@
+<title>Deep Field Survey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* ── Deep Field Survey ───────────────────────────────────────────────
+   Single-theme by choice: this is a field instrument used at dusk.
+   Every colour is painted explicitly so the page holds on any host ground.
+   ─────────────────────────────────────────────────────────────────── */
+:root{
+  /* cold world — the map */
+  --ink:        #0E1417;
+  --ink-2:      #131C20;
+  --ink-3:      #1A252A;
+  --contour:    #2A3A40;
+  --contour-hi: #3C525A;
+  --ice:        #8FB7C4;
+  --ice-dim:    #4A6B76;
+
+  /* warm world — the record */
+  --paper:      #E8E3D6;
+  --paper-2:    #DCD5C4;
+  --paper-edge: #C4BBA6;
+  --graphite:   #22282A;
+  --graphite-2: #4E575A;
+
+  /* marks — sampled from the field sketches */
+  --ochre:      #C08A2E;
+  --ochre-dim:  #7A5A22;
+  --sienna:     #8C5533;
+  --moss:       #6E8F4A;
+
+  --tier-here:  #C08A2E;
+  --tier-form:  #7E9AA6;
+  --tier-world: #5E6B6F;
+
+  --sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --serif: "Fraunces", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background:var(--ink);
+  color:var(--paper);
+  font-family:var(--sans);
+  font-size:14px;
+  line-height:1.45;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+button{ font:inherit; color:inherit; background:none; border:none; padding:0; cursor:pointer; }
+:focus-visible{ outline:2px solid var(--ochre); outline-offset:2px; border-radius:2px; }
+
+/* ── shell ───────────────────────────────────────────────────────── */
+#app{ position:relative; height:100%; display:flex; flex-direction:column; overflow:hidden; }
+
+.stage{ position:relative; flex:1 1 auto; min-height:0; overflow:hidden; }
+#mapCanvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+#markerLayer{ position:absolute; inset:0; }
+
+/* vignette + grain over the map, so the chrome reads on top of it */
+.stage::after{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:
+    radial-gradient(130% 92% at 50% 44%, rgba(14,20,23,0) 54%, rgba(14,20,23,.62) 100%),
+    var(--grain);
+  background-size:auto, 160px 160px;
+  opacity:.34;
+}
+
+/* ── top bar ─────────────────────────────────────────────────────── */
+.topbar{
+  position:absolute; left:0; right:0; top:0; z-index:6;
+  display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
+  padding:14px 16px; padding-top:calc(14px + env(safe-area-inset-top, 0px));
+  background:linear-gradient(180deg, rgba(14,20,23,.92) 12%, rgba(14,20,23,0) 100%);
+  pointer-events:none;
+}
+.topbar > *{ pointer-events:auto; }
+
+.place{ min-width:0; }
+.place .eyebrow{
+  font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ice-dim); margin-bottom:3px;
+}
+.place .name{
+  font-family:var(--serif); font-size:19px; font-weight:600; line-height:1.15;
+  color:var(--paper); font-variation-settings:"SOFT" 30,"WONK" 1;
+}
+.place .coords{
+  font-family:var(--mono); font-size:10.5px; color:var(--graphite-2);
+  margin-top:3px; letter-spacing:.02em;
+}
+
+.journal-btn{
+  display:flex; align-items:center; gap:8px; flex:none;
+  padding:8px 12px 8px 10px; border-radius:2px;
+  background:var(--paper); color:var(--graphite);
+  box-shadow:0 1px 0 var(--paper-edge), 0 8px 22px rgba(0,0,0,.45);
+  transform:rotate(-.5deg);
+  transition:transform .18s ease;
+}
+.journal-btn:hover{ transform:rotate(-.5deg) translateY(-1px); }
+.journal-btn .cnt{
+  font-family:var(--mono); font-size:15px; font-weight:500; line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.journal-btn .lbl{
+  font-size:9.5px; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--graphite-2); line-height:1.2; text-align:left;
+}
+
+/* ── climate readout ─────────────────────────────────────────────── */
+.readout{
+  position:absolute; left:16px; bottom:14px; z-index:5;
+  display:flex; flex-direction:column; gap:7px;
+  pointer-events:none;
+}
+.chip{
+  display:inline-flex; align-items:center; gap:7px; align-self:flex-start;
+  padding:5px 9px; border-radius:2px;
+  background:rgba(19,28,32,.82);
+  border:1px solid var(--contour);
+  font-family:var(--mono); font-size:10px; letter-spacing:.07em;
+  color:var(--ice); white-space:nowrap;
+}
+.chip b{ color:var(--paper); font-weight:500; font-variant-numeric:tabular-nums; }
+.chip .sw{ width:7px; height:7px; border-radius:50%; flex:none; background:var(--ice); }
+
+/* ── sediment core scrubber ──────────────────────────────────────── */
+.core{
+  position:relative; z-index:7; flex:none;
+  background:var(--ink-2);
+  border-top:1px solid var(--contour);
+  padding:10px 16px 12px;
+  padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+  user-select:none; touch-action:none;
+}
+.core-head{
+  display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+  margin-bottom:8px;
+}
+.core-head .fm{
+  font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--ice-dim);
+}
+.core-head .fm b{ color:var(--ice); font-weight:500; }
+.core-head .age{
+  font-family:var(--mono); font-size:13px; color:var(--paper);
+  font-variant-numeric:tabular-nums; letter-spacing:.01em;
+}
+.core-head .age span{ color:var(--graphite-2); font-size:10px; }
+
+.core-strip{ position:relative; height:54px; cursor:ew-resize; }
+#coreCanvas{ position:absolute; inset:0; width:100%; height:100%; display:block; border-radius:1px; }
+.needle{
+  position:absolute; top:-3px; bottom:-3px; width:1px;
+  background:var(--ochre); pointer-events:none;
+  box-shadow:0 0 0 1px rgba(14,20,23,.9), 0 0 12px rgba(192,138,46,.55);
+}
+.needle::before{
+  content:""; position:absolute; top:-4px; left:50%; transform:translateX(-50%) rotate(45deg);
+  width:7px; height:7px; background:var(--ochre);
+}
+.core-axis{
+  display:flex; justify-content:space-between;
+  font-family:var(--mono); font-size:9.5px; color:var(--graphite-2);
+  letter-spacing:.06em; margin-top:6px;
+}
+
+/* ── spawn markers ───────────────────────────────────────────────── */
+.mark{
+  position:absolute; width:46px; height:46px; margin:-23px 0 0 -23px;
+  display:grid; place-items:center; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.mark svg{ overflow:visible; }
+.mark .halo{
+  position:absolute; width:30px; height:30px; border-radius:50%;
+  border:1px solid var(--ochre-dim); opacity:.55;
+  animation:breathe 4.6s ease-in-out infinite;
+}
+.mark[data-tier="formation"] .halo{ border-color:var(--tier-form); }
+.mark[data-tier="world"]     .halo{ border-color:var(--tier-world); }
+@keyframes breathe{
+  0%,100%{ transform:scale(.82); opacity:.5; }
+  50%    { transform:scale(1.22); opacity:.14; }
+}
+.mark:hover .glyph, .mark:focus-visible .glyph{ transform:translateY(-2px); }
+.mark .glyph{ transition:transform .2s ease; }
+
+.you{ position:absolute; margin:-15px 0 0 -15px; width:30px; height:30px; pointer-events:none; }
+
+/* ── bottom sheet (encounter) ────────────────────────────────────── */
+.scrim{
+  position:absolute; inset:0; z-index:8; background:rgba(8,12,14,.6);
+  opacity:0; pointer-events:none; transition:opacity .28s ease;
+}
+.scrim.on{ opacity:1; pointer-events:auto; }
+
+.sheet{
+  position:absolute; left:0; right:0; bottom:0; z-index:9;
+  background:var(--paper); color:var(--graphite);
+  border-radius:3px 3px 0 0;
+  box-shadow:0 -1px 0 var(--paper-edge), 0 -22px 60px rgba(0,0,0,.6);
+  transform:translateY(102%);
+  transition:transform .4s cubic-bezier(.22,.8,.26,1);
+  max-height:88%; display:flex; flex-direction:column;
+  background-image:var(--grain); background-size:160px 160px; background-blend-mode:multiply;
+}
+.sheet.on{ transform:translateY(0); }
+.sheet-inner{ overflow-y:auto; padding:16px 20px 22px; padding-bottom:calc(22px + env(safe-area-inset-bottom, 0px)); }
+.grab{ width:34px; height:3px; border-radius:2px; background:var(--paper-edge); margin:9px auto 0; flex:none; }
+
+.tier{
+  display:inline-flex; align-items:center; gap:6px;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase;
+  padding:3px 7px 3px 5px; border-radius:1px;
+  background:rgba(34,40,42,.06); border-left:2px solid var(--tier-world);
+  color:var(--graphite-2);
+}
+.tier[data-t="here"]      { border-left-color:var(--tier-here);  color:#8A611B; background:rgba(192,138,46,.1); }
+.tier[data-t="formation"] { border-left-color:var(--tier-form); }
+
+.binomial{
+  font-family:var(--serif); font-style:italic; font-weight:600;
+  font-size:clamp(23px, 6.2vw, 30px); line-height:1.08; letter-spacing:-.01em;
+  margin:10px 0 3px; text-wrap:balance;
+  font-variation-settings:"SOFT" 40,"WONK" 1;
+}
+.common{ font-size:13px; color:var(--graphite-2); margin-bottom:14px; }
+
+.facts{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(84px,1fr));
+  gap:1px; background:var(--paper-edge);
+  border:1px solid var(--paper-edge); margin:14px 0;
+}
+.fact{ background:var(--paper); padding:9px 10px; }
+.fact dt{
+  font-family:var(--mono); font-size:9px; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--graphite-2); margin-bottom:3px;
+}
+.fact dd{
+  margin:0; font-family:var(--mono); font-size:13px; font-weight:500;
+  font-variant-numeric:tabular-nums; color:var(--graphite);
+}
+.note{ font-size:13px; line-height:1.55; color:var(--graphite-2); max-width:60ch; }
+.note em{ font-style:italic; color:var(--graphite); }
+
+.cite{
+  font-family:var(--mono); font-size:9.5px; color:var(--graphite-2);
+  border-top:1px solid var(--paper-edge); padding-top:9px; margin-top:16px; line-height:1.5;
+}
+
+.act{
+  display:block; width:100%; margin-top:16px; padding:14px;
+  background:var(--graphite); color:var(--paper);
+  font-size:13px; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+  border-radius:2px; transition:background .16s ease;
+}
+.act:hover{ background:#000; }
+.act.ghost{
+  background:none; color:var(--graphite-2); border:1px solid var(--paper-edge);
+  margin-top:8px; font-weight:500;
+}
+.act.ghost:hover{ background:rgba(34,40,42,.05); color:var(--graphite); }
+
+/* ── the sketch moment ───────────────────────────────────────────── */
+.plate{
+  position:relative; width:100%; aspect-ratio:10/7; max-width:100%;
+  background:#F4F1E8; border:1px solid var(--paper-edge);
+  display:grid; place-items:center; overflow:hidden;
+}
+.plate svg{ width:100%; height:100%; display:block; }
+.plate-cap{
+  position:absolute; left:10px; bottom:8px; right:10px;
+  font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--graphite-2); display:flex; justify-content:space-between; gap:10px;
+  text-shadow:0 0 4px #F4F1E8, 0 0 8px #F4F1E8, 0 0 3px #F4F1E8;
+}
+
+.namerow{ display:flex; gap:8px; margin-top:14px; align-items:stretch; }
+.namerow input{
+  flex:1 1 auto; min-width:0; font-family:var(--serif); font-size:17px; font-weight:600;
+  padding:11px 12px; color:var(--graphite);
+  background:#F4F1E8; border:1px solid var(--paper-edge); border-radius:2px;
+}
+.namerow input::placeholder{ color:#A99F8B; font-weight:400; font-style:italic; }
+.dice{
+  flex:none; width:46px; display:grid; place-items:center;
+  border:1px solid var(--paper-edge); border-radius:2px; background:#F4F1E8;
+  color:var(--graphite-2);
+}
+.dice:hover{ color:var(--graphite); background:var(--paper-2); }
+
+.traits{ display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.trait{
+  font-family:var(--mono); font-size:10px; letter-spacing:.06em;
+  padding:3px 7px; background:rgba(34,40,42,.06); color:var(--graphite-2); border-radius:1px;
+}
+
+/* ── journal ─────────────────────────────────────────────────────── */
+.journal{
+  position:absolute; inset:0; z-index:12;
+  background:var(--paper); color:var(--graphite);
+  background-image:var(--grain); background-size:160px 160px; background-blend-mode:multiply;
+  transform:translateY(100%); transition:transform .42s cubic-bezier(.22,.8,.26,1);
+  display:flex; flex-direction:column;
+}
+.journal.on{ transform:translateY(0); }
+.j-head{
+  flex:none; display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:16px 20px 12px; padding-top:calc(16px + env(safe-area-inset-top, 0px));
+  border-bottom:1px solid var(--paper-edge);
+}
+.j-head h2{
+  margin:0; font-family:var(--serif); font-size:22px; font-weight:600; letter-spacing:-.01em;
+  font-variation-settings:"SOFT" 30,"WONK" 1;
+}
+.j-head .sub{
+  font-family:var(--mono); font-size:10px; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--graphite-2); margin-top:2px;
+}
+.close{
+  flex:none; width:34px; height:34px; display:grid; place-items:center;
+  border:1px solid var(--paper-edge); border-radius:2px; color:var(--graphite-2);
+}
+.close:hover{ background:var(--paper-2); color:var(--graphite); }
+
+.j-body{ flex:1 1 auto; overflow-y:auto; padding:16px 20px 28px; padding-bottom:calc(28px + env(safe-area-inset-bottom, 0px)); }
+.j-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px; }
+.card{ text-align:left; display:flex; flex-direction:column; }
+.card .thumb{
+  aspect-ratio:10/7; background:#F4F1E8; border:1px solid var(--paper-edge);
+  overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+}
+.card:hover .thumb{ transform:translateY(-2px); box-shadow:0 6px 16px rgba(34,40,42,.14); }
+.card .thumb svg{ width:100%; height:100%; display:block; }
+.card .given{
+  font-family:var(--serif); font-size:15px; font-weight:600; margin-top:8px; line-height:1.2;
+}
+.card .sp{ font-family:var(--serif); font-style:italic; font-size:11.5px; color:var(--graphite-2); margin-top:1px; }
+.card .meta{
+  font-family:var(--mono); font-size:9px; letter-spacing:.06em; color:var(--graphite-2);
+  margin-top:5px; display:flex; align-items:center; gap:5px;
+}
+.card .meta .dot{ width:5px; height:5px; border-radius:50%; background:var(--tier-world); flex:none; }
+.card .meta .dot[data-t="here"]{ background:var(--tier-here); }
+.card .meta .dot[data-t="formation"]{ background:var(--tier-form); }
+
+.empty{ max-width:44ch; margin:34px auto; text-align:center; }
+.empty .fig{ opacity:.3; margin-bottom:14px; }
+.empty h3{ font-family:var(--serif); font-size:19px; font-weight:600; margin:0 0 6px; }
+.empty p{ font-size:13px; color:var(--graphite-2); line-height:1.6; margin:0; }
+
+/* ── toast ───────────────────────────────────────────────────────── */
+.toast{
+  position:absolute; left:50%; bottom:96px; z-index:20; transform:translate(-50%, 14px);
+  background:var(--paper); color:var(--graphite);
+  padding:9px 14px; border-radius:2px; font-size:12.5px; font-weight:500;
+  box-shadow:0 10px 30px rgba(0,0,0,.45);
+  opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease;
+  max-width:calc(100% - 32px); text-align:center;
+}
+.toast.on{ opacity:1; transform:translate(-50%, 0); }
+
+.provenance{
+  font-family:var(--mono); font-size:10px; line-height:1.6; color:var(--graphite-2);
+  border-left:2px solid var(--paper-edge); padding-left:10px; margin-top:14px;
+}
+.provenance b{ color:var(--graphite); font-weight:500; }
+
+.disclaimer{
+  font-family:var(--mono); font-size:9px; letter-spacing:.05em; color:var(--graphite-2);
+  text-align:center; margin-top:22px; line-height:1.6; opacity:.8;
+}
+
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+}
+@media (max-width:380px){
+  .j-grid{ grid-template-columns:repeat(auto-fill, minmax(130px,1fr)); }
+}
+</style>
+
+<div id="app">
+  <div class="stage" id="stage">
+    <canvas id="mapCanvas"></canvas>
+    <div id="markerLayer"></div>
+
+    <div class="topbar">
+      <div class="place">
+        <div class="eyebrow">Survey position</div>
+        <div class="name" id="placeName">Ghaggar terrace, Dera Bassi</div>
+        <div class="coords" id="coords">30.5869° N · 76.8420° E · 287 m</div>
+      </div>
+      <button class="journal-btn" id="openJournal">
+        <span class="cnt" id="jCount">0</span>
+        <span class="lbl">Field<br>Journal</span>
+      </button>
+    </div>
+
+    <div class="readout">
+      <div class="chip"><span class="sw" id="climSw"></span><span id="climLabel">Glacial · cool, arid</span></div>
+      <div class="chip">Mean annual <b id="tempVal">18.4</b> °C &nbsp;·&nbsp; Monsoon <b id="monVal">62</b>%</div>
+    </div>
+  </div>
+
+  <div class="core" id="core">
+    <div class="core-head">
+      <div class="fm">Formation · <b id="fmName">Pinjor</b></div>
+      <div class="age"><span id="ageLabel">1.24</span> <span>Ma before present</span></div>
+    </div>
+    <div class="core-strip" id="coreStrip">
+      <canvas id="coreCanvas"></canvas>
+      <div class="needle" id="needle" style="left:50%"></div>
+    </div>
+    <div class="core-axis">
+      <span>2.58 Ma — base Pleistocene</span>
+      <span>11.7 ka — Holocene</span>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+
+  <!-- encounter / sketch sheet -->
+  <section class="sheet" id="sheet" aria-hidden="true">
+    <div class="grab"></div>
+    <div class="sheet-inner" id="sheetInner"></div>
+  </section>
+
+  <!-- field journal -->
+  <section class="journal" id="journal" aria-hidden="true">
+    <div class="j-head">
+      <div>
+        <h2>Field Journal</h2>
+        <div class="sub" id="jSub">No entries</div>
+      </div>
+      <button class="close" id="closeJournal" aria-label="Close journal">
+        <svg width="13" height="13" viewBox="0 0 13 13" aria-hidden="true"><path d="M1 1 L12 12 M12 1 L1 12" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
+      </button>
+    </div>
+    <div class="j-body" id="jBody"></div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ════════════════════════════════════════════════════════════════════
+   0 · seeded randomness
+   ════════════════════════════════════════════════════════════════════ */
+function hashStr(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return h>>>0; }
+function rngFrom(seed){
+  let a = (typeof seed === "string" ? hashStr(seed) : seed>>>0) || 1;
+  return function(){
+    a ^= a<<13; a>>>=0; a ^= a>>17; a ^= a<<5; a>>>=0;
+    return a / 4294967296;
+  };
+}
+const lerp = (a,b,t)=>a+(b-a)*t;
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const pick = (rng, arr)=>arr[Math.floor(rng()*arr.length)%arr.length];
+
+/* ════════════════════════════════════════════════════════════════════
+   1 · species — Upper Siwalik / Indian Pleistocene, curated sample
+   Ages in ka. Skeletons are tapered bones in a 200×140 frame,
+   ground line at y≈126.
+   ════════════════════════════════════════════════════════════════════ */
+const B = (ax,ay,ra, bx,by,rb)=>({a:[ax,ay],ra, b:[bx,by],rb});
+
+const SPECIES = [
+  {
+    id:"elephas-hysudricus",
+    binomial:"Elephas hysudricus",
+    common:"Siwalik elephant",
+    from:2600, to:200,
+    tier:"here",
+    mass:"4.5 t", height:"3.1 m", diet:"Grazer",
+    formation:"Pinjor Fm.",
+    note:"The commonest large proboscidean in the Pinjor beds, and widely read as close to the ancestry of the living Asian elephant. Tall, narrow skull; high-crowned molars built for the coarse grass that spread across these floodplains as the monsoon weakened.",
+    coats:["#6B6257","#5A5248","#7A6E60"],
+    bones:[
+      B(70,60,30, 124,56,33), B(116,40,22, 136,44,20),
+      B(142,46,23, 158,50,18),
+      B(163,60,8, 172,86,5.5), B(172,86,5.5, 167,108,3.6),
+      B(139,44,17, 130,64,15),
+      B(146,76,11, 149,124,7.5), B(133,78,10, 131,124,7),
+      B(85,76,12, 84,124,8), B(73,78,11, 69,124,7.5),
+      B(66,58,5, 57,84,2.4)
+    ],
+    marks:[
+      {d:"M162 70 C 176 80, 192 82, 196 68", w:2.2},
+      {d:"M157 74 C 170 85, 184 87, 189 76", w:1.8},
+      {d:"M149 48 m -1.6 0 a 1.6 1.6 0 1 0 3.2 0 a 1.6 1.6 0 1 0 -3.2 0", w:1.6, fill:true}
+    ]
+  },
+  {
+    id:"stegodon-insignis",
+    binomial:"Stegodon insignis",
+    common:"Siwalik stegodon",
+    from:2580, to:600,
+    tier:"here",
+    mass:"5.2 t", height:"3.4 m", diet:"Browser",
+    formation:"Pinjor Fm.",
+    note:"Not an elephant but a cousin, with low-crowned ridged molars suited to leaves and soft browse. Its tusks grew so close together that the trunk had to be carried to one side — a detail reconstructed from tusk sockets, not from any soft tissue.",
+    coats:["#6E6455","#7D7161","#5F574B"],
+    bones:[
+      B(68,58,31, 126,54,34), B(118,38,23, 138,42,21),
+      B(144,44,24, 160,48,19),
+      B(165,58,8.5, 175,86,6), B(175,86,6, 171,110,3.8),
+      B(140,42,18, 131,62,16),
+      B(148,74,12, 151,124,8), B(134,76,11, 132,124,7.5),
+      B(84,74,13, 83,124,8.5), B(71,76,12, 67,124,8),
+      B(64,56,5.5, 54,82,2.6)
+    ],
+    marks:[
+      {d:"M164 66 C 182 72, 199 66, 203 50", w:2.6},
+      {d:"M160 70 C 177 77, 193 72, 198 57", w:2.1},
+      {d:"M151 46 m -1.7 0 a 1.7 1.7 0 1 0 3.4 0 a 1.7 1.7 0 1 0 -3.4 0", w:1.7, fill:true}
+    ]
+  },
+  {
+    id:"sivatherium-giganteum",
+    binomial:"Sivatherium giganteum",
+    common:"Siwalik giant giraffid",
+    from:2580, to:900,
+    tier:"here",
+    mass:"1.2 t", height:"2.2 m", diet:"Browser",
+    formation:"Pinjor Fm.",
+    note:"A short-necked giraffe built like an ox, carrying two pairs of ossicones — small over the eyes, broad and palmate behind. Named for Shiva, from the hills these beds are named for. Among the heaviest ruminants known.",
+    coats:["#8C6A3F","#9A7A4C","#7B5C36"],
+    bones:[
+      B(76,66,26, 124,62,29), B(122,50,22, 138,42,18),
+      B(140,38,14, 150,24,11),
+      B(152,20,11, 168,18,9),
+      B(140,78,9, 143,124,6), B(128,80,8.5, 126,124,5.5),
+      B(88,78,10, 88,124,6.5), B(77,80,9, 73,124,6),
+      B(72,64,5, 62,80,2.2)
+    ],
+    marks:[
+      {d:"M158 12 C 150 2, 138 2, 134 10", w:2.4},
+      {d:"M170 12 C 178 2, 190 4, 192 14", w:2.4},
+      {d:"M152 14 C 148 6, 142 4, 138 6", w:1.6},
+      {d:"M162 19 m -1.5 0 a 1.5 1.5 0 1 0 3 0 a 1.5 1.5 0 1 0 -3 0", w:1.5, fill:true}
+    ]
+  },
+  {
+    id:"hexaprotodon-sivalensis",
+    binomial:"Hexaprotodon sivalensis",
+    common:"Siwalik hippopotamus",
+    from:2580, to:100,
+    tier:"here",
+    mass:"1.8 t", height:"1.4 m", diet:"Grazer",
+    formation:"Pinjor Fm.",
+    note:"Six incisors instead of four, and eye sockets set lower than a modern hippo's — a hippo that spent rather less of its day submerged. Its remains are common wherever the Siwalik rivers left channel sands, which is why it turns up under this terrace.",
+    coats:["#5E5A55","#6B655D","#524E49"],
+    bones:[
+      B(70,84,25, 128,82,27),
+      B(134,80,23, 158,82,20),
+      B(146,98,10, 148,124,8), B(132,100,9.5, 130,124,7.5),
+      B(84,98,10, 84,124,8), B(71,100,9.5, 67,124,7.5),
+      B(66,82,6, 55,90,2.6)
+    ],
+    marks:[
+      {d:"M170 88 C 176 92, 176 98, 170 100", w:1.8},
+      {d:"M152 74 m -1.5 0 a 1.5 1.5 0 1 0 3 0 a 1.5 1.5 0 1 0 -3 0", w:1.5, fill:true},
+      {d:"M162 96 L 165 102 M170 96 L 172 102", w:1.5}
+    ]
+  },
+  {
+    id:"megalochelys-atlas",
+    binomial:"Megalochelys atlas",
+    common:"Colossal tortoise",
+    from:2580, to:1400,
+    tier:"here",
+    mass:"1 t", height:"1.8 m shell", diet:"Browser",
+    formation:"Pinjor Fm.",
+    note:"A shell approaching two metres — the largest land tortoise in the fossil record. It went out of the Siwaliks in the early Pleistocene, at about the point the hills started shedding boulder beds and the rivers turned harsh.",
+    coats:["#6F6247","#7E7053","#5E5340"],
+    bones:[
+      B(72,86,30, 128,86,30), B(84,66,26, 118,66,26),
+      B(134,86,13, 152,80,10),
+      B(156,76,9, 168,74,7.5),
+      B(120,106,10, 124,124,8), B(82,106,10, 78,124,8),
+      B(100,110,9, 102,124,7)
+    ],
+    marks:[
+      {d:"M78 74 C 100 58, 116 58, 134 74", w:1.8},
+      {d:"M86 62 L 88 82 M100 58 L 100 80 M114 59 L 113 81", w:1.4},
+      {d:"M164 70 m -1.4 0 a 1.4 1.4 0 1 0 2.8 0 a 1.4 1.4 0 1 0 -2.8 0", w:1.4, fill:true}
+    ]
+  },
+  {
+    id:"equus-sivalensis",
+    binomial:"Equus sivalensis",
+    common:"Siwalik horse",
+    from:2580, to:600,
+    tier:"formation",
+    mass:"380 kg", height:"1.5 m", diet:"Grazer",
+    formation:"Pinjor Fm.",
+    note:"The arrival of true horses in these beds is a dating tool in its own right — the 'Equus datum' marks the spread of open grassland across Asia. Where you find it, the forest had already thinned.",
+    coats:["#7C6349","#8B7154","#6A5540"],
+    bones:[
+      B(78,70,21, 124,68,23), B(122,58,18, 136,48,14),
+      B(139,44,12, 156,40,10),
+      B(140,86,8, 143,124,5.5), B(129,88,7.5, 127,124,5),
+      B(88,86,9, 88,124,6), B(78,88,8, 74,124,5.5),
+      B(74,68,5, 62,86,2.2)
+    ],
+    marks:[
+      {d:"M136 40 C 132 30, 130 28, 132 26", w:1.6},
+      {d:"M142 38 C 140 28, 139 26, 141 24", w:1.6},
+      {d:"M150 38 m -1.4 0 a 1.4 1.4 0 1 0 2.8 0 a 1.4 1.4 0 1 0 -2.8 0", w:1.4, fill:true},
+      {d:"M124 54 C 132 44, 136 36, 138 30", w:2.2}
+    ]
+  },
+  {
+    id:"pachycrocuta-brevirostris",
+    binomial:"Pachycrocuta brevirostris",
+    common:"Giant short-faced hyena",
+    from:2580, to:400,
+    tier:"formation",
+    mass:"110 kg", height:"1.0 m", diet:"Bone-crusher",
+    formation:"Pinjor Fm.",
+    note:"The largest hyena that ever lived, and almost certainly more scavenger than hunter — its jaws could open the long bones nothing else could reach. Wherever its coprolites survive, they are full of splintered bone.",
+    coats:["#7A6B58","#665A4B","#8A7A65"],
+    bones:[
+      B(76,76,20, 122,70,22), B(120,62,18, 138,58,15),
+      B(141,56,13, 158,58,10),
+      B(142,88,8, 145,124,5.5), B(131,90,8, 129,124,5.5),
+      B(86,90,8.5, 86,124,6), B(76,92,8, 72,124,5.5),
+      B(72,76,5, 60,88,2.2)
+    ],
+    marks:[
+      {d:"M136 48 C 134 40, 136 36, 141 36", w:1.8},
+      {d:"M146 47 C 145 39, 148 36, 152 38", w:1.8},
+      {d:"M152 56 m -1.4 0 a 1.4 1.4 0 1 0 2.8 0 a 1.4 1.4 0 1 0 -2.8 0", w:1.4, fill:true},
+      {d:"M158 64 L 164 66 M156 68 L 162 70", w:1.3}
+    ]
+  },
+  {
+    id:"crocodylus-palaeindicus",
+    binomial:"Crocodylus palaeindicus",
+    common:"Siwalik crocodile",
+    from:2580, to:300,
+    tier:"formation",
+    mass:"450 kg", height:"4.6 m long", diet:"Ambush predator",
+    formation:"Pinjor Fm.",
+    note:"A broad-snouted crocodile of the Siwalik channels, possibly on the line toward the living mugger. Its scutes turn up in the same sands as the hippo — the two shared a river that no longer exists.",
+    coats:["#5A5C46","#4B4D3B","#6A6C52"],
+    bones:[
+      B(58,100,15, 112,98,17), B(112,98,17, 150,100,13),
+      B(152,100,12, 180,102,8),
+      B(56,100,13, 34,108,6), B(34,108,6, 16,116,3),
+      B(120,112,7, 126,122,5), B(70,112,7, 64,122,5),
+      B(146,112,6, 152,122,4.5), B(94,112,6, 90,122,4.5)
+    ],
+    marks:[
+      {d:"M158 94 m -1.4 0 a 1.4 1.4 0 1 0 2.8 0 a 1.4 1.4 0 1 0 -2.8 0", w:1.4, fill:true},
+      {d:"M164 104 L 168 108 M172 104 L 175 108 M156 106 L 159 110", w:1.3},
+      {d:"M70 90 L 74 84 M86 88 L 90 82 M102 88 L 106 82 M118 89 L 122 83", w:1.5}
+    ]
+  },
+  {
+    id:"palaeoloxodon-namadicus",
+    binomial:"Palaeoloxodon namadicus",
+    common:"Narmada straight-tusked elephant",
+    from:800, to:24,
+    tier:"world",
+    mass:"11 t", height:"4.5 m", diet:"Browser",
+    formation:"Narmada Valley",
+    note:"Known chiefly from the Narmada Valley, well south of here, and a contender for the largest land mammal ever to have lived — the size estimates rest on a handful of fragmentary limb bones, so treat them as a range, not a record.",
+    coats:["#6A6156","#5B534A","#786D5F"],
+    bones:[
+      B(66,50,33, 126,46,36), B(116,28,25, 138,32,23),
+      B(144,32,26, 162,36,20),
+      B(168,48,9, 178,80,6), B(178,80,6, 174,106,4),
+      B(141,32,20, 131,54,18),
+      B(150,68,13, 153,124,8.5), B(134,70,12, 132,124,8),
+      B(82,68,14, 81,124,9), B(68,70,13, 63,124,8.5),
+      B(62,48,6, 51,78,2.8)
+    ],
+    marks:[
+      {d:"M166 58 C 184 64, 202 54, 205 34", w:2.8},
+      {d:"M161 62 C 178 70, 195 62, 199 44", w:2.2},
+      {d:"M154 29 m -1.7 0 a 1.7 1.7 0 1 0 3.4 0 a 1.7 1.7 0 1 0 -3.4 0", w:1.7, fill:true}
+    ]
+  },
+  {
+    id:"bos-namadicus",
+    binomial:"Bos namadicus",
+    common:"Indian aurochs",
+    from:700, to:12,
+    tier:"world",
+    mass:"900 kg", height:"1.8 m", diet:"Grazer",
+    formation:"Narmada Valley",
+    note:"The Indian aurochs, and the likely wild stock behind zebu cattle. It survived deep enough into the Holocene that the people who first herded its descendants would have known the wild animal.",
+    coats:["#4F473E","#5E564A","#6C6353"],
+    bones:[
+      B(78,66,24, 126,64,26), B(120,52,21, 138,50,17),
+      B(142,48,14, 158,50,11),
+      B(142,86,9, 145,124,6), B(130,88,8.5, 128,124,5.5),
+      B(88,86,10, 88,124,6.5), B(77,88,9, 73,124,6),
+      B(74,64,5, 62,82,2.2)
+    ],
+    marks:[
+      {d:"M140 40 C 132 30, 120 30, 116 40", w:2.4},
+      {d:"M150 40 C 158 30, 170 32, 172 42", w:2.4},
+      {d:"M152 48 m -1.5 0 a 1.5 1.5 0 1 0 3 0 a 1.5 1.5 0 1 0 -3 0", w:1.5, fill:true}
+    ]
+  }
+];
+const SP_BY_ID = Object.fromEntries(SPECIES.map(s=>[s.id,s]));
+
+/* Upper Siwalik lithostratigraphy — the core we scrub through. */
+const FORMATIONS = [
+  { name:"Tatrot",              from:2580, to:2400, bands:["#7A6A52","#6B5B45","#83735A"] },
+  { name:"Pinjor",              from:2400, to:600,  bands:["#8A7A5E","#7E6E54","#95856A","#73634C"] },
+  { name:"Boulder Conglomerate",from:600,  to:200,  bands:["#5F5A52","#6E6860","#4F4A44"] },
+  { name:"Post-Siwalik alluvium",from:200, to:11.7, bands:["#6A6152","#756C5C","#5E5648"] }
+];
+function formationAt(ka){
+  for(const f of FORMATIONS) if(ka<=f.from && ka>f.to) return f;
+  return FORMATIONS[FORMATIONS.length-1];
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   2 · climate model — schematic glacial/interglacial cycling.
+   Illustrative shape, not a reconstruction: 41 kyr obliquity pacing
+   before the mid-Pleistocene transition, 100 kyr after it.
+   ════════════════════════════════════════════════════════════════════ */
+function climateAt(ka){
+  const period = ka > 1000 ? 41 : 100;
+  const phase = (ka/period) * Math.PI*2;
+  let v = Math.sin(phase)*0.5 + 0.5;
+  v = ka > 1000 ? lerp(0.3, 0.7, v) : Math.pow(v, 1.5);   // sawtooth-ish after MPT
+  v = clamp(v*0.88 + Math.sin(ka/13)*0.06 + 0.06, 0, 1);
+  return {
+    warmth: v,                                  // 0 glacial … 1 interglacial
+    temp: lerp(15.2, 24.6, v),                  // °C mean annual, schematic
+    monsoon: Math.round(lerp(48, 108, v)),      // % of present
+    label: v < 0.34 ? "Glacial · cool, arid"
+         : v < 0.62 ? "Transitional · seasonal"
+                    : "Interglacial · warm, wet"
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   3 · scribble engine — silhouette from bones, zigzag hatch, clipped.
+   Same generator the real app would ship; art is deterministic per seed.
+   ════════════════════════════════════════════════════════════════════ */
+function bonesBBox(bones){
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const b of bones){
+    x0=Math.min(x0,b.a[0]-b.ra,b.b[0]-b.rb); x1=Math.max(x1,b.a[0]+b.ra,b.b[0]+b.rb);
+    y0=Math.min(y0,b.a[1]-b.ra,b.b[1]-b.rb); y1=Math.max(y1,b.a[1]+b.ra,b.b[1]+b.rb);
+  }
+  return {x0,y0,x1,y1};
+}
+
+function clipCircles(bones){
+  let out="";
+  for(const b of bones){
+    const dx=b.b[0]-b.a[0], dy=b.b[1]-b.a[1];
+    const len=Math.hypot(dx,dy);
+    const n=Math.max(3, Math.ceil(len/2.6));
+    for(let i=0;i<=n;i++){
+      const t=i/n;
+      out += `<circle cx="${(b.a[0]+dx*t).toFixed(1)}" cy="${(b.a[1]+dy*t).toFixed(1)}" r="${lerp(b.ra,b.rb,t).toFixed(1)}"/>`;
+    }
+  }
+  return out;
+}
+
+/* One zigzag stroke running along `angle`, offset `off` perpendicular. */
+function zigzag(bbox, angle, off, rng, cfg){
+  const cx=(bbox.x0+bbox.x1)/2, cy=(bbox.y0+bbox.y1)/2;
+  const diag=Math.hypot(bbox.x1-bbox.x0, bbox.y1-bbox.y0)/2 + 6;
+  const ux=Math.cos(angle), uy=Math.sin(angle);
+  const px=-uy, py=ux;
+  const ox=cx+px*off, oy=cy+py*off;
+  const step=cfg.zig, amp=cfg.amp;
+  const pts=[];
+  let s=-diag, k=0;
+  while(s<=diag){
+    const j=(rng()-0.5)*cfg.jit;
+    const a=(k%2===0? amp : -amp) + j;
+    pts.push([ox+ux*s+px*a, oy+uy*s+py*a]);
+    s += step*(0.78+rng()*0.44); k++;
+  }
+  return pts;
+}
+
+function polyLen(pts){ let L=0; for(let i=1;i<pts.length;i++) L+=Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]); return L; }
+function polyD(pts){ return "M"+pts.map(p=>`${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" L "); }
+
+/* Deterministic individual traits from a seed. */
+const COAT_WORDS = ["dark-flanked","pale-shouldered","rust-backed","ash-grey","dun","umber","smoke-grey","tawny"];
+const BUILD_WORDS = ["heavy-built","lean","broad-chested","long-limbed","stocky","rangy"];
+const AGE_WORDS  = ["juvenile","young adult","prime adult","old adult","aged"];
+
+function traitsFor(sp, seed){
+  const rng = rngFrom(seed+"|traits");
+  return {
+    coat: sp.coats[Math.floor(rng()*sp.coats.length)],
+    coatWord: pick(rng, COAT_WORDS),
+    build: pick(rng, BUILD_WORDS),
+    ageClass: pick(rng, AGE_WORDS),
+    scale: 0.9 + rng()*0.22,
+    scarred: rng() < 0.22
+  };
+}
+
+/**
+ * Build the scribble. Returns { svg, strokes } — strokes carry their
+ * length so the draw-on animation can be exact.
+ */
+function drawCreature(sp, seed, opts){
+  opts = opts || {};
+  const rng = rngFrom(seed+"|art");
+  const tr = traitsFor(sp, seed);
+  const bbox = bonesBBox(sp.bones);
+  const uid = "c"+Math.abs(hashStr(seed+sp.id)).toString(36);
+
+  const angle = (-0.62 + rng()*0.5);                 // hatch direction
+  const cfg = { zig: 7.5+rng()*3.5, amp: 3.0+rng()*2.2, jit: 2.0+rng()*1.6 };
+  const spacing = opts.dense ? 2.4 : (2.9 + rng()*1.3);
+  const span = Math.hypot(bbox.x1-bbox.x0, bbox.y1-bbox.y0);
+
+  // Per-stroke variation keeps the hatch from weaving into a visible grid —
+  // a mechanical lattice is the tell that separates a filter from a hand.
+  const strokes=[];
+  for(let off=-span/2; off<=span/2; off+=spacing*(0.7+rng()*0.75)){
+    const c = { zig:cfg.zig*(0.7+rng()*0.75), amp:cfg.amp*(0.55+rng()*0.95), jit:cfg.jit };
+    const pts = zigzag(bbox, angle+(rng()-0.5)*0.26, off + (rng()-0.5)*1.6, rng, c);
+    strokes.push({ d:polyD(pts), len:polyLen(pts), w:(0.8+rng()*0.95).toFixed(2), c:tr.coat });
+  }
+  // a second, sparser cross-pass in a darker tone — depth, like the samples
+  const rng2 = rngFrom(seed+"|cross");
+  for(let off=-span/2; off<=span/2; off+=spacing*(2.2+rng2()*1.6)){
+    const pts = zigzag(bbox, angle+0.72+(rng2()-0.5)*0.4, off,
+                       rng2, {zig:cfg.zig*1.5, amp:cfg.amp*0.9, jit:cfg.jit*1.2});
+    strokes.push({ d:polyD(pts), len:polyLen(pts), w:(0.7+rng2()*0.7).toFixed(2), c:"#3A332B", o:0.42 });
+  }
+
+  const hatch = strokes.map((s,i)=>
+    `<path d="${s.d}" fill="none" stroke="${s.c}" stroke-width="${s.w}" stroke-linecap="round" stroke-linejoin="round"${s.o?` opacity="${s.o}"`:""} data-i="${i}" style="stroke-dasharray:${s.len.toFixed(1)};stroke-dashoffset:${opts.animate? s.len.toFixed(1):0}"/>`
+  ).join("");
+
+  const marks = (sp.marks||[]).map((m,i)=>{
+    const j = strokes.length + i;
+    const L = m.fill ? 12 : 220;
+    return m.fill
+      ? `<path d="${m.d}" fill="#141210" stroke="none" data-i="${j}" style="${opts.animate?"opacity:0":""}"/>`
+      : `<path d="${m.d}" fill="none" stroke="#141210" stroke-width="${m.w}" stroke-linecap="round" data-i="${j}" style="stroke-dasharray:${L};stroke-dashoffset:${opts.animate?L:0}"/>`;
+  }).join("");
+
+  // ground scribble, like the grey hatching under the cat
+  const grng = rngFrom(seed+"|ground");
+  let ground="";
+  const gCount = opts.thumb ? 4 : 6;
+  for(let i=0;i<gCount;i++){
+    const y = 125 + i*2.2 + (grng()-0.5)*1.4;
+    const x0 = bbox.x0 + 2 + grng()*18, x1 = bbox.x1 - 2 - grng()*18;
+    const pts=[]; let x=x0, k=0;
+    while(x<x1){ pts.push([x, y + (k%2?1.9:-1.9)*(0.5+grng()) + (grng()-0.5)]); x += 9+grng()*9; k++; }
+    if(pts.length>1){
+      const L=polyLen(pts); const j=strokes.length+(sp.marks||[]).length+i;
+      ground += `<path d="${polyD(pts)}" fill="none" stroke="#8F8A80" stroke-width="${(0.7+grng()*0.5).toFixed(2)}" stroke-linecap="round" opacity="0.75" data-i="${j}" style="stroke-dasharray:${L.toFixed(1)};stroke-dashoffset:${opts.animate?L.toFixed(1):0}"/>`;
+    }
+  }
+
+  const total = strokes.length + (sp.marks||[]).length + gCount;
+  const svg =
+    `<svg viewBox="-6 0 216 140" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Field sketch of ${sp.binomial}">
+      <defs><clipPath id="${uid}">${clipCircles(sp.bones)}</clipPath></defs>
+      <g clip-path="url(#${uid})">${hatch}</g>
+      ${marks}${ground}
+    </svg>`;
+
+  return { svg, total, traits:tr };
+}
+
+/* Progressive reveal — stroke by stroke, the way a sketch actually lands. */
+function animateSketch(root, total){
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const paths = root.querySelectorAll("path[data-i]");
+  if(reduce){
+    paths.forEach(p=>{ p.style.strokeDashoffset="0"; p.style.opacity="1"; });
+    return Promise.resolve();
+  }
+  const dur = 1500;
+  paths.forEach(p=>{
+    const i = +p.dataset.i;
+    const delay = (i/total)*dur;
+    p.style.transition = `stroke-dashoffset 260ms linear ${delay}ms, opacity 160ms linear ${delay}ms`;
+    requestAnimationFrame(()=>{ p.style.strokeDashoffset="0"; p.style.opacity=p.style.opacity==="0"?"1":(p.getAttribute("opacity")||"1"); });
+  });
+  return new Promise(r=>setTimeout(r, dur+320));
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   4 · state
+   ════════════════════════════════════════════════════════════════════ */
+const STORE_KEY = "deepfield.sightings.v1";
+const state = {
+  ka: 1240,                       // scrubber position, ka before present
+  lat: 30.5869, lng: 76.8420,
+  place: "Ghaggar terrace, Dera Bassi",
+  spawns: [],
+  sightings: loadSightings(),
+  active: null
+};
+
+function loadSightings(){
+  try{ const raw = localStorage.getItem(STORE_KEY); return raw ? JSON.parse(raw) : []; }
+  catch(e){ return []; }
+}
+function saveSightings(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state.sightings)); }catch(e){ /* private mode — session only */ }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   5 · terrain — value noise → contours, rivers, vegetation
+   ════════════════════════════════════════════════════════════════════ */
+const NOISE = (()=>{
+  const g = new Float32Array(256*256);
+  const r = rngFrom("ghaggar-terrace");
+  for(let i=0;i<g.length;i++) g[i]=r();
+  const at=(x,y)=>g[((y&255)<<8)|(x&255)];
+  const sm=t=>t*t*(3-2*t);
+  return function(x,y){
+    const xi=Math.floor(x), yi=Math.floor(y);
+    const xf=sm(x-xi), yf=sm(y-yi);
+    return lerp(lerp(at(xi,yi),at(xi+1,yi),xf), lerp(at(xi,yi+1),at(xi+1,yi+1),xf), yf);
+  };
+})();
+
+function field(x,y){
+  let v=0, amp=1, f=1, norm=0;
+  for(let o=0;o<4;o++){ v += NOISE(x*f, y*f)*amp; norm+=amp; amp*=0.5; f*=2.05; }
+  return v/norm;
+}
+
+let mapCtx, mapW=0, mapH=0, mapDPR=1;
+function sizeMap(){
+  const c=document.getElementById("mapCanvas");
+  const r=c.getBoundingClientRect();
+  mapDPR=Math.min(window.devicePixelRatio||1, 2);
+  mapW=Math.max(1, Math.round(r.width)); mapH=Math.max(1, Math.round(r.height));
+  c.width=mapW*mapDPR; c.height=mapH*mapDPR;
+  mapCtx=c.getContext("2d");
+  mapCtx.setTransform(mapDPR,0,0,mapDPR,0,0);
+}
+
+function drawMap(){
+  if(!mapCtx) return;
+  const cl = climateAt(state.ka);
+  const g = mapCtx;
+  g.clearRect(0,0,mapW,mapH);
+
+  // ground — shifts a touch warmer through an interglacial
+  const base = g.createLinearGradient(0,0,0,mapH);
+  const warm = cl.warmth;
+  base.addColorStop(0, `rgb(${Math.round(lerp(15,20,warm))},${Math.round(lerp(22,27,warm))},${Math.round(lerp(26,26,warm))})`);
+  base.addColorStop(1, `rgb(${Math.round(lerp(11,15,warm))},${Math.round(lerp(16,20,warm))},${Math.round(lerp(19,19,warm))})`);
+  g.fillStyle=base; g.fillRect(0,0,mapW,mapH);
+
+  const S = 170;                                   // field scale
+  const ox = 3.2, oy = 5.7;
+  const h = (px,py)=> field(px/S+ox, py/S+oy);
+
+  // ── contours (marching squares, hand-jittered) ──────────────────
+  // fBm clusters near 0.5, so the levels sit in a narrow band around it —
+  // that is what makes the sheet read as dense topography rather than empty.
+  const cell=5, levels=17;
+  const jr = rngFrom("contour-jitter");
+  for(let li=0; li<levels; li++){
+    const lv = 0.335 + li*0.0205;
+    const index = li%4===0;                      // every 4th is an index contour
+    const highGround = li>=13;                   // ridge tops catch the cold light
+    g.strokeStyle = highGround
+      ? `rgba(143,183,196,${lerp(0.5,0.2,warm).toFixed(3)})`
+      : (index ? "rgba(84,113,124,0.92)" : "rgba(58,80,88,0.7)");
+    g.lineWidth = index ? 1.15 : 0.75;
+    g.lineCap="round";
+    g.beginPath();
+    for(let y=0;y<mapH;y+=cell){
+      for(let x=0;x<mapW;x+=cell){
+        const a=h(x,y), b=h(x+cell,y), c=h(x+cell,y+cell), d=h(x,y+cell);
+        let idx=0;
+        if(a>lv)idx|=8; if(b>lv)idx|=4; if(c>lv)idx|=2; if(d>lv)idx|=1;
+        if(idx===0||idx===15) continue;
+        const T=(p,q)=>(lv-p)/((q-p)||1e-6);
+        const top=[x+cell*T(a,b), y], right=[x+cell, y+cell*T(b,c)];
+        const bot=[x+cell*T(d,c), y+cell], left=[x, y+cell*T(a,d)];
+        const seg=(p,q)=>{
+          const j=(jr()-0.5)*1.5;
+          g.moveTo(p[0]+j, p[1]+j); g.lineTo(q[0]+j, q[1]+j);
+        };
+        switch(idx){
+          case 1: case 14: seg(left,bot); break;
+          case 2: case 13: seg(bot,right); break;
+          case 3: case 12: seg(left,right); break;
+          case 4: case 11: seg(top,right); break;
+          case 6: case 9:  seg(top,bot); break;
+          case 7: case 8:  seg(left,top); break;
+          case 5:  seg(left,top); seg(bot,right); break;
+          case 10: seg(left,bot); seg(top,right); break;
+        }
+      }
+    }
+    g.stroke();
+  }
+
+  // ── rivers — downhill walks, wider when the monsoon is strong ───
+  const rr = rngFrom("rivers");
+  const riverW = lerp(1.1, 4.0, warm);
+  g.strokeStyle = `rgba(143,183,196,${lerp(0.42,0.82,warm).toFixed(3)})`;
+  g.lineCap="round"; g.lineJoin="round";
+  for(let n=0;n<6;n++){
+    let x=rr()*mapW, y=rr()*mapH*0.35;
+    g.beginPath(); g.moveTo(x,y);
+    for(let step=0; step<220; step++){
+      const e=2.2;
+      const gx = h(x+e,y)-h(x-e,y), gy = h(x,y+e)-h(x,y-e);
+      const m = Math.hypot(gx,gy)||1e-6;
+      x -= (gx/m)*2.6 + (rr()-0.5)*1.5;
+      y -= (gy/m)*2.6 + (rr()-0.5)*1.5 - 0.7;
+      if(x<-40||x>mapW+40||y<-40||y>mapH+40) break;
+      g.lineTo(x,y);
+    }
+    g.lineWidth = riverW*(0.6+rr()*0.8);
+    g.stroke();
+  }
+
+  // ── vegetation — scribble tufts, density follows the monsoon ────
+  const vr = rngFrom("veg");
+  const count = Math.round(mapW*mapH/620 * lerp(0.3, 1.0, warm));
+  g.lineWidth=0.9; g.lineCap="round";
+  for(let i=0;i<count;i++){
+    const x=vr()*mapW, y=vr()*mapH;
+    const e=h(x,y);
+    if(e<0.40 || e>0.62) continue;                 // vegetation hugs the mid slopes
+    const green = lerp(0.42, 0.86, warm);
+    g.strokeStyle = `rgba(110,143,74,${(green*(0.45+vr()*0.55)).toFixed(3)})`;
+    const s = 3.0+vr()*4.2;
+    g.beginPath();
+    g.moveTo(x, y+s);
+    g.lineTo(x+(vr()-0.5)*2.2, y);
+    g.lineTo(x+(vr()-0.5)*3.2, y-s*0.7);
+    g.stroke();
+  }
+
+  // ── ice / frost wash at the cold end ────────────────────────────
+  if(warm < 0.42){
+    const k = (0.42-warm)/0.42;
+    const ig = g.createLinearGradient(0,0,0,mapH);
+    ig.addColorStop(0, `rgba(143,183,196,${(0.13*k).toFixed(3)})`);
+    ig.addColorStop(0.55, `rgba(143,183,196,${(0.04*k).toFixed(3)})`);
+    ig.addColorStop(1, "rgba(143,183,196,0)");
+    g.fillStyle=ig; g.fillRect(0,0,mapW,mapH);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   6 · spawns — tier-weighted, deterministic per (age bucket, position)
+   ════════════════════════════════════════════════════════════════════ */
+const TIER_WEIGHT = { here:5, formation:3, world:1 };
+const TIER_LABEL  = { here:"Found here", formation:"This formation", world:"This world" };
+const TIER_BLURB  = {
+  here:"Confirmed occurrences within 50 km of your position.",
+  formation:"Recorded from the same formation, elsewhere along the Siwalik front.",
+  world:"Shared this climate and continent, but not recorded at this site."
+};
+
+function availableAt(ka){
+  return SPECIES.filter(s => ka <= s.from && ka >= s.to);
+}
+
+function rollSpawns(){
+  const bucket = Math.round(state.ka/25);
+  const rng = rngFrom(`spawns|${bucket}|${state.lat.toFixed(3)}`);
+  const pool = availableAt(state.ka);
+  if(!pool.length){ state.spawns=[]; return; }
+
+  const weighted=[];
+  pool.forEach(s=>{ for(let i=0;i<TIER_WEIGHT[s.tier];i++) weighted.push(s); });
+
+  const n = 3 + Math.floor(rng()*3);
+  const out=[], used=new Set();
+  let guard=0;
+  while(out.length<n && guard++<80){
+    const sp = weighted[Math.floor(rng()*weighted.length)];
+    if(used.has(sp.id) && rng()>0.25) continue;
+    used.add(sp.id);
+    out.push({
+      key: `${bucket}-${out.length}-${sp.id}`,
+      sp,
+      seed: `${sp.id}|${bucket}|${out.length}|${Math.floor(rng()*99999)}`,
+      x: 0.14 + rng()*0.72,
+      y: 0.24 + rng()*0.5
+    });
+  }
+  state.spawns = out;
+}
+
+const SPOOR = {
+  here:      '<path d="M8 3 C11 3 12 6 11 8 C10 10 6 10 5 8 C4 6 5 3 8 3 Z M4 12 c1.6-.6 2.6.6 2 1.9 -.6 1.3-2.6 1.1-3-.2 -.3-1 .2-1.5 1-1.7 Z M11.6 12 c1.6-.6 2.6.6 2 1.9 -.6 1.3-2.6 1.1-3-.2 -.3-1 .2-1.5 1-1.7 Z" />',
+  formation: '<path d="M8 2.6 L13 8.4 L10.6 8.4 L10.6 13.6 L5.4 13.6 L5.4 8.4 L3 8.4 Z" />',
+  world:     '<path d="M8 2.4 a5.6 5.6 0 1 0 0.01 0 Z M8 5.6 a2.4 2.4 0 1 1 -0.01 0 Z" />'
+};
+
+function renderMarkers(){
+  const layer = document.getElementById("markerLayer");
+  layer.innerHTML="";
+
+  // your own position — a surveyor's mark
+  const you=document.createElement("div");
+  you.className="you"; you.style.left="50%"; you.style.top="64%";
+  you.innerHTML = `<svg viewBox="0 0 30 30" aria-hidden="true">
+    <circle cx="15" cy="15" r="9.5" fill="none" stroke="#8FB7C4" stroke-width="1" opacity="0.55"/>
+    <circle cx="15" cy="15" r="3" fill="#8FB7C4"/>
+    <path d="M15 1 V6 M15 24 V29 M1 15 H6 M24 15 H29" stroke="#8FB7C4" stroke-width="1" opacity="0.7"/>
+  </svg>`;
+  layer.appendChild(you);
+
+  state.spawns.forEach(s=>{
+    const logged = state.sightings.some(g=>g.spawnKey===s.key);
+    const el=document.createElement("button");
+    el.className="mark"; el.dataset.tier=s.sp.tier;
+    el.style.left=(s.x*100)+"%"; el.style.top=(s.y*100)+"%";
+    el.setAttribute("aria-label", `${s.sp.binomial} — ${TIER_LABEL[s.sp.tier]}${logged?", already sketched":""}`);
+    const col = s.sp.tier==="here" ? "var(--ochre)" : s.sp.tier==="formation" ? "var(--tier-form)" : "var(--tier-world)";
+    el.innerHTML =
+      `${logged?"":'<span class="halo"></span>'}
+       <svg class="glyph" width="22" height="22" viewBox="0 0 16 16" fill="${logged?"#4E575A":col}" aria-hidden="true"
+            style="filter:drop-shadow(0 1px 3px rgba(8,12,14,.9))">
+         ${SPOOR[s.sp.tier]}
+       </svg>`;
+    el.addEventListener("click", ()=>openEncounter(s));
+    layer.appendChild(el);
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   7 · the sediment core
+   ════════════════════════════════════════════════════════════════════ */
+const KA_MAX=2580, KA_MIN=11.7;
+const kaToT = ka => (KA_MAX-ka)/(KA_MAX-KA_MIN);
+const tToKa = t  => KA_MAX - t*(KA_MAX-KA_MIN);
+
+let coreCtx, coreW=0, coreH=0;
+function sizeCore(){
+  const c=document.getElementById("coreCanvas");
+  const r=c.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  coreW=Math.max(1,Math.round(r.width)); coreH=Math.max(1,Math.round(r.height));
+  c.width=coreW*dpr; c.height=coreH*dpr;
+  coreCtx=c.getContext("2d");
+  coreCtx.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function drawCore(){
+  if(!coreCtx) return;
+  const g=coreCtx;
+  g.clearRect(0,0,coreW,coreH);
+
+  // lithology bands
+  const lr = rngFrom("litho");
+  for(let x=0;x<coreW;x++){
+    const ka=tToKa(x/coreW);
+    const fm=formationAt(ka);
+    const idx=Math.floor((Math.sin(ka/7.3)*0.5+0.5)*fm.bands.length)%fm.bands.length;
+    g.fillStyle=fm.bands[idx];
+    g.globalAlpha=0.52;
+    g.fillRect(x,0,1,coreH);
+  }
+  g.globalAlpha=1;
+
+  // grain texture
+  for(let i=0;i<coreW*1.6;i++){
+    const x=lr()*coreW, y=lr()*coreH;
+    g.fillStyle=`rgba(14,20,23,${(lr()*0.24).toFixed(3)})`;
+    g.fillRect(x,y,1+lr()*1.6,1);
+  }
+
+  // formation boundaries
+  g.strokeStyle="rgba(14,20,23,0.8)"; g.lineWidth=1;
+  FORMATIONS.forEach(f=>{
+    if(f.to<=KA_MIN) return;
+    const x=Math.round(kaToT(f.to)*coreW)+0.5;
+    g.beginPath(); g.moveTo(x,0); g.lineTo(x,coreH); g.stroke();
+  });
+
+  // climate curve — glacial/interglacial pacing across the core
+  g.beginPath();
+  for(let x=0;x<=coreW;x++){
+    const w = climateAt(tToKa(x/coreW)).warmth;
+    const y = coreH - 4 - w*(coreH-12);
+    x===0 ? g.moveTo(x,y) : g.lineTo(x,y);
+  }
+  g.strokeStyle="rgba(232,227,214,0.62)"; g.lineWidth=1.1; g.stroke();
+
+  // cold shading beneath the curve
+  g.lineTo(coreW,coreH); g.lineTo(0,coreH); g.closePath();
+  g.fillStyle="rgba(143,183,196,0.09)"; g.fill();
+
+  // mid-Pleistocene transition — a real inflection worth marking
+  const mx=Math.round(kaToT(1000)*coreW)+0.5;
+  g.setLineDash([2,3]); g.strokeStyle="rgba(192,138,46,0.55)"; g.lineWidth=1;
+  g.beginPath(); g.moveTo(mx,0); g.lineTo(mx,coreH); g.stroke(); g.setLineDash([]);
+  g.fillStyle="rgba(192,138,46,0.92)";
+  g.font='9px "IBM Plex Mono", monospace';
+  if(mx < coreW-76){
+    g.fillStyle="rgba(14,20,23,0.8)"; g.fillRect(mx+3, coreH-12, 25, 10);
+    g.fillStyle="rgba(192,138,46,0.95)"; g.fillText("MPT", mx+5, coreH-4);
+  }
+
+  g.strokeStyle="rgba(42,58,64,0.9)"; g.lineWidth=1;
+  g.strokeRect(0.5,0.5,coreW-1,coreH-1);
+}
+
+function setKa(ka, opts){
+  state.ka = clamp(ka, KA_MIN, KA_MAX);
+  const t = kaToT(state.ka);
+  document.getElementById("needle").style.left = (t*100)+"%";
+
+  const shown = state.ka>=1000 ? (state.ka/1000).toFixed(2) : (state.ka/1000).toFixed(3);
+  document.getElementById("ageLabel").textContent = shown;
+  document.getElementById("fmName").textContent = formationAt(state.ka).name;
+
+  const cl = climateAt(state.ka);
+  document.getElementById("climLabel").textContent = cl.label;
+  document.getElementById("tempVal").textContent = cl.temp.toFixed(1);
+  document.getElementById("monVal").textContent = cl.monsoon;
+  const sw = document.getElementById("climSw");
+  sw.style.background = cl.warmth<0.34 ? "#8FB7C4" : cl.warmth<0.62 ? "#7E9AA6" : "#6E8F4A";
+
+  if(!opts || !opts.quiet){
+    rollSpawns();
+    renderMarkers();
+  }
+  drawMap();
+}
+
+function bindCore(){
+  const strip=document.getElementById("coreStrip");
+  let dragging=false;
+  const toKa = clientX=>{
+    const r=strip.getBoundingClientRect();
+    return tToKa(clamp((clientX-r.left)/r.width, 0, 1));
+  };
+  const down=e=>{ dragging=true; strip.setPointerCapture(e.pointerId); setKa(toKa(e.clientX)); };
+  const move=e=>{ if(dragging) setKa(toKa(e.clientX)); };
+  const up  =e=>{ dragging=false; try{ strip.releasePointerCapture(e.pointerId); }catch(err){} };
+  strip.addEventListener("pointerdown", down);
+  strip.addEventListener("pointermove", move);
+  strip.addEventListener("pointerup", up);
+  strip.addEventListener("pointercancel", up);
+
+  strip.tabIndex=0;
+  strip.setAttribute("role","slider");
+  strip.setAttribute("aria-label","Time — thousands of years before present");
+  strip.addEventListener("keydown", e=>{
+    const step = e.shiftKey ? 100 : 15;
+    if(e.key==="ArrowLeft"){ setKa(state.ka+step); e.preventDefault(); }
+    if(e.key==="ArrowRight"){ setKa(state.ka-step); e.preventDefault(); }
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   8 · encounter → sketch → name
+   ════════════════════════════════════════════════════════════════════ */
+const sheet=document.getElementById("sheet");
+const scrim=document.getElementById("scrim");
+const inner=document.getElementById("sheetInner");
+
+function openSheet(){ sheet.classList.add("on"); scrim.classList.add("on"); sheet.setAttribute("aria-hidden","false"); }
+function closeSheet(){
+  sheet.classList.remove("on"); scrim.classList.remove("on");
+  sheet.setAttribute("aria-hidden","true"); state.active=null;
+}
+scrim.addEventListener("click", closeSheet);
+
+function fmtAge(ka){ return ka>=1000 ? `${(ka/1000).toFixed(2)} Ma` : `${Math.round(ka)} ka`; }
+
+function openEncounter(spawn){
+  state.active = spawn;
+  const sp = spawn.sp;
+  const existing = state.sightings.find(g=>g.spawnKey===spawn.key);
+  const art = drawCreature(sp, spawn.seed, {});
+  const tr = art.traits;
+
+  inner.innerHTML = `
+    <span class="tier" data-t="${sp.tier}">${TIER_LABEL[sp.tier]}</span>
+    <h2 class="binomial">${sp.binomial}</h2>
+    <div class="common">${sp.common}</div>
+
+    <div class="plate" id="plate">${art.svg}
+      <div class="plate-cap"><span>${sp.formation}</span><span>${fmtAge(state.ka)}</span></div>
+    </div>
+
+    <dl class="facts">
+      <div class="fact"><dt>Mass</dt><dd>${sp.mass}</dd></div>
+      <div class="fact"><dt>Height</dt><dd>${sp.height}</dd></div>
+      <div class="fact"><dt>Range</dt><dd>${fmtAge(sp.from)}–${fmtAge(sp.to)}</dd></div>
+      <div class="fact"><dt>Diet</dt><dd style="font-size:11px">${sp.diet}</dd></div>
+    </dl>
+
+    <p class="note">${sp.note}</p>
+
+    <div class="traits">
+      <span class="trait">${tr.ageClass}</span>
+      <span class="trait">${tr.build}</span>
+      <span class="trait">${tr.coatWord}</span>
+      ${tr.scarred?'<span class="trait">old flank scar</span>':""}
+    </div>
+
+    <div class="cite">${TIER_BLURB[sp.tier]}</div>
+
+    ${existing
+      ? `<button class="act ghost" id="actBack">Already in your journal — close</button>`
+      : `<button class="act" id="actSketch">Sketch it</button>`}
+  `;
+  openSheet();
+
+  const b1=document.getElementById("actSketch");
+  if(b1) b1.addEventListener("click", ()=>runSketch(spawn));
+  const b2=document.getElementById("actBack");
+  if(b2) b2.addEventListener("click", closeSheet);
+}
+
+function suggestName(sp, seed){
+  const rng=rngFrom(seed+"|name");
+  const first=["Ghaggar","Pinjore","Dera","Morni","Sukhna","Tatrot","Kalka","Nada"];
+  const second=["the Elder","One-Tusk","Broadback","of the Shallows","Longshadow","the Quiet","Redflank","Nightwalker"];
+  return `${pick(rng,first)} ${pick(rng,second)}`;
+}
+
+async function runSketch(spawn){
+  const sp=spawn.sp;
+  const art=drawCreature(sp, spawn.seed, {animate:true});
+  const tr=art.traits;
+  const suggested=suggestName(sp, spawn.seed);
+
+  inner.innerHTML = `
+    <span class="tier" data-t="${sp.tier}">${TIER_LABEL[sp.tier]}</span>
+    <h2 class="binomial">${sp.binomial}</h2>
+    <div class="common">${sp.common}</div>
+    <div class="plate" id="plate">${art.svg}
+      <div class="plate-cap"><span>${state.place}</span><span>${fmtAge(state.ka)}</span></div>
+    </div>
+    <div id="afterSketch" hidden>
+      <div class="namerow">
+        <input id="nameInput" type="text" maxlength="40" placeholder="${suggested}" aria-label="Name this individual" autocomplete="off">
+        <button class="dice" id="diceBtn" aria-label="Suggest a name">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+            <rect x="1.5" y="1.5" width="12" height="12" rx="1.5"/>
+            <circle cx="5" cy="5" r="1.1" fill="currentColor" stroke="none"/>
+            <circle cx="10" cy="10" r="1.1" fill="currentColor" stroke="none"/>
+            <circle cx="7.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"/>
+          </svg>
+        </button>
+      </div>
+      <div class="provenance">
+        <b>${state.place}</b><br>
+        ${state.lat.toFixed(4)}° N · ${state.lng.toFixed(4)}° E<br>
+        ${formationAt(state.ka).name} · ${fmtAge(state.ka)} before present<br>
+        ${climateAt(state.ka).label}
+      </div>
+      <button class="act" id="saveBtn">Add to journal</button>
+      <button class="act ghost" id="discardBtn">Discard sketch</button>
+    </div>
+  `;
+
+  await animateSketch(document.getElementById("plate"), art.total);
+
+  const after=document.getElementById("afterSketch");
+  after.hidden=false;
+  const input=document.getElementById("nameInput");
+
+  document.getElementById("diceBtn").addEventListener("click", ()=>{
+    input.placeholder = suggestName(sp, spawn.seed+Math.random());
+    input.value="";
+  });
+  document.getElementById("discardBtn").addEventListener("click", closeSheet);
+  document.getElementById("saveBtn").addEventListener("click", ()=>{
+    const given=(input.value||"").trim() || input.placeholder;
+    state.sightings.unshift({
+      id: "s"+Date.now().toString(36),
+      spawnKey: spawn.key,
+      speciesId: sp.id,
+      seed: spawn.seed,
+      given,
+      ka: state.ka,
+      lat: state.lat, lng: state.lng,
+      place: state.place,
+      formation: formationAt(state.ka).name,
+      tier: sp.tier,
+      at: Date.now()
+    });
+    saveSightings();
+    refreshCount();
+    renderMarkers();
+    closeSheet();
+    toast(`${given} added to your field journal`);
+  });
+  input.focus();
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   9 · journal
+   ════════════════════════════════════════════════════════════════════ */
+const journal=document.getElementById("journal");
+
+function refreshCount(){
+  const n=state.sightings.length;
+  document.getElementById("jCount").textContent=n;
+  const species=new Set(state.sightings.map(s=>s.speciesId)).size;
+  document.getElementById("jSub").textContent =
+    n===0 ? "No entries" : `${n} sighting${n===1?"":"s"} · ${species} of ${SPECIES.length} taxa`;
+}
+
+function renderJournal(){
+  const body=document.getElementById("jBody");
+  if(!state.sightings.length){
+    body.innerHTML=`
+      <div class="empty">
+        <div class="fig">
+          <svg width="64" height="46" viewBox="0 0 64 46" fill="none" stroke="#22282A" stroke-width="1.1" aria-hidden="true">
+            <path d="M4 42 h56 M10 42 V14 l10-8 10 8 v28 M34 42 V20 l10-6 10 6 v22"/>
+          </svg>
+        </div>
+        <h3>Nothing recorded yet</h3>
+        <p>Scrub the core to a depth, find a trace on the map, and sketch what you see. Every entry keeps where you stood and how deep in time you were standing.</p>
+      </div>`;
+    return;
+  }
+  const cards = state.sightings.map(s=>{
+    const sp=SP_BY_ID[s.speciesId];
+    const art=drawCreature(sp, s.seed, {thumb:true});
+    return `<button class="card" data-id="${s.id}">
+      <span class="thumb">${art.svg}</span>
+      <span class="given">${escapeHtml(s.given)}</span>
+      <span class="sp">${sp.binomial}</span>
+      <span class="meta"><span class="dot" data-t="${s.tier}"></span>${fmtAge(s.ka)} · ${s.formation}</span>
+    </button>`;
+  }).join("");
+
+  body.innerHTML = `<div class="j-grid">${cards}</div>
+    <p class="disclaimer">Prototype · 10 taxa curated from Upper Siwalik and Narmada records.<br>
+    The shipping build reads occurrences from the Paleobiology Database.</p>`;
+
+  body.querySelectorAll(".card").forEach(c=>{
+    c.addEventListener("click", ()=>openEntry(c.dataset.id));
+  });
+}
+
+function openEntry(id){
+  const s=state.sightings.find(x=>x.id===id);
+  if(!s) return;
+  const sp=SP_BY_ID[s.speciesId];
+  const art=drawCreature(sp, s.seed, {});
+  const tr=art.traits;
+  const d=new Date(s.at);
+
+  inner.innerHTML=`
+    <span class="tier" data-t="${s.tier}">${TIER_LABEL[s.tier]}</span>
+    <h2 class="binomial" style="font-style:normal">${escapeHtml(s.given)}</h2>
+    <div class="common"><em style="font-family:var(--serif);font-style:italic">${sp.binomial}</em> · ${sp.common}</div>
+    <div class="plate">${art.svg}
+      <div class="plate-cap"><span>${s.place}</span><span>${fmtAge(s.ka)}</span></div>
+    </div>
+    <div class="traits">
+      <span class="trait">${tr.ageClass}</span>
+      <span class="trait">${tr.build}</span>
+      <span class="trait">${tr.coatWord}</span>
+      ${tr.scarred?'<span class="trait">old flank scar</span>':""}
+    </div>
+    <div class="provenance">
+      <b>${s.place}</b><br>
+      ${s.lat.toFixed(4)}° N · ${s.lng.toFixed(4)}° E<br>
+      ${s.formation} · ${fmtAge(s.ka)} before present<br>
+      Sketched ${d.toLocaleDateString(undefined,{day:"numeric",month:"short",year:"numeric"})}
+    </div>
+    <p class="note" style="margin-top:14px">${sp.note}</p>
+    <button class="act ghost" id="closeEntry">Close</button>
+  `;
+  openSheet();
+  document.getElementById("closeEntry").addEventListener("click", closeSheet);
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+}
+
+document.getElementById("openJournal").addEventListener("click", ()=>{
+  renderJournal();
+  journal.classList.add("on");
+  journal.setAttribute("aria-hidden","false");
+});
+document.getElementById("closeJournal").addEventListener("click", ()=>{
+  journal.classList.remove("on");
+  journal.setAttribute("aria-hidden","true");
+});
+
+/* ── toast ─────────────────────────────────────────────────────────── */
+let toastT;
+function toast(msg){
+  const t=document.getElementById("toast");
+  t.textContent=msg; t.classList.add("on");
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>t.classList.remove("on"), 2600);
+}
+
+document.addEventListener("keydown", e=>{
+  if(e.key!=="Escape") return;
+  if(sheet.classList.contains("on")) closeSheet();
+  else if(journal.classList.contains("on")){
+    journal.classList.remove("on"); journal.setAttribute("aria-hidden","true");
+  }
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   10 · boot
+   ════════════════════════════════════════════════════════════════════ */
+function boot(){
+  sizeMap(); sizeCore();
+  drawCore();
+  bindCore();
+  setKa(state.ka);
+  refreshCount();
+}
+
+let rsT;
+window.addEventListener("resize", ()=>{
+  clearTimeout(rsT);
+  rsT=setTimeout(()=>{ sizeMap(); sizeCore(); drawCore(); setKa(state.ka,{quiet:true}); renderMarkers(); }, 140);
+});
+
+document.fonts && document.fonts.ready ? document.fonts.ready.then(boot) : boot();
+</script>
